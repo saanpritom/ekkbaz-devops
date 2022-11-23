@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  jwtdb:
+    image: postgres
+    container_name: jwt_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: root
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: superacces123
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - /home/ubuntu/stacks/databases/jwt_postgresql:/var/lib/postgresql/data
+    expose:
+      - 5432
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  businessdb:
+    image: postgres
+    container_name: business_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: root
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: superacces123
+      PGDATA: /var/lib/postgresql/data/pgdata
+      PGPORT: 5433
+    volumes:
+      - /home/ubuntu/stacks/databases/business_postgresql:/var/lib/postgresql/data
+    expose:
+      - 5433
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  jwtauthservice:
+    build: /home/ubuntu/stacks/services/ekkbaz-jwt-auth
+    image: auth
+    container_name: auth
+    restart: on-failure
+    env_file: /home/ubuntu/stacks/envs/auth.envs
+    volumes:
+      - /home/ubuntu/stacks/files/jwt-auth:/service/app/staticfiles
+    expose:
+      - 9000
+    depends_on:
+      jwtdb:
+        condition: service_healthy
+
+  businessappservice:
+    build: /home/ubuntu/stacks/services/ekkbaz-data-app
+    image: business
+    container_name: business
+    restart: on-failure
+    env_file: /home/ubuntu/stacks/envs/business.envs
+    volumes:
+      - /home/ubuntu/stacks/files/business-app:/service/app/staticfiles
+    expose:
+      - 9500
+    depends_on:
+      businessdb:
+        condition: service_healthy
+
+  webserver:
+    image: nginx
+    container_name: nginx
+    restart: always
+    volumes:
+      - /home/ubuntu/stacks/nginx/jwt.skooby.cloud.conf:/etc/nginx/conf.d/jwt.skooby.cloud.conf
+      - /home/ubuntu/stacks/nginx/business.skooby.cloud.conf:/etc/nginx/conf.d/business.skooby.cloud.conf
+    ports:
+      - '80:80'
+    depends_on:
+      jwtauthservice:
+        condition: service_started
+      businessappservice:
+        condition: service_started
+
